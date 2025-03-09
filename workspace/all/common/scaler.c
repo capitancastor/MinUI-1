@@ -421,6 +421,84 @@ void scale6x5_c32(void* __restrict src, void* __restrict dst, uint32_t sw, uint3
 void scale6x6_c32(void* __restrict src, void* __restrict dst, uint32_t sw, uint32_t sh, uint32_t sp, uint32_t dw, uint32_t dh, uint32_t dp) {
 	scale6x_c32(src, dst, sw, sh, sp, dw, dh, dp, 6); }
 
+// Scale2x algorithm (Advanced scaling that preserves pixel art edges)
+void scale2x_adv_c16(void* __restrict src, void* __restrict dst, uint32_t sw, uint32_t sh, uint32_t sp, uint32_t dw, uint32_t dh, uint32_t dp) {
+	if (!sw||!sh) return;
+
+	uint32_t swl = sw * sizeof(uint16_t);
+	if (!sp) { sp = swl; } if (!dp) { dp = swl*2; }
+
+	uint16_t* s = (uint16_t* __restrict)src;
+	uint16_t* d = (uint16_t* __restrict)dst;
+
+	uint32_t src_pitch_px = sp / sizeof(uint16_t);
+	uint32_t dst_pitch_px = dp / sizeof(uint16_t);
+
+	for (uint32_t y = 0; y < sh; y++) {
+		for (uint32_t x = 0; x < sw; x++) {
+			uint16_t center = s[y * src_pitch_px + x];
+			
+			// Get adjacent pixels (with bounds checking)
+			uint16_t top = (y > 0) ? s[(y-1) * src_pitch_px + x] : center;
+			uint16_t bottom = (y < sh-1) ? s[(y+1) * src_pitch_px + x] : center;
+			uint16_t left = (x > 0) ? s[y * src_pitch_px + (x-1)] : center;
+			uint16_t right = (x < sw-1) ? s[y * src_pitch_px + (x+1)] : center;
+			
+			// Calculate the 2x2 output block using Scale2x algorithm
+			uint16_t e = (top == left && top != right) ? top : center;
+			uint16_t f = (top == right && top != left) ? top : center;
+			uint16_t g = (bottom == left && bottom != right) ? bottom : center;
+			uint16_t h = (bottom == right && bottom != left) ? bottom : center;
+			
+			// Write to destination
+			uint32_t dst_offset = y * 2 * dst_pitch_px + x * 2;
+			d[dst_offset] = e;
+			d[dst_offset + 1] = f;
+			d[dst_offset + dst_pitch_px] = g;
+			d[dst_offset + dst_pitch_px + 1] = h;
+		}
+	}
+}
+
+// Scale2x algorithm for 32-bit color depth
+void scale2x_adv_c32(void* __restrict src, void* __restrict dst, uint32_t sw, uint32_t sh, uint32_t sp, uint32_t dw, uint32_t dh, uint32_t dp) {
+	if (!sw||!sh) return;
+
+	uint32_t swl = sw * sizeof(uint32_t);
+	if (!sp) { sp = swl; } if (!dp) { dp = swl*2; }
+
+	uint32_t* s = (uint32_t* __restrict)src;
+	uint32_t* d = (uint32_t* __restrict)dst;
+
+	uint32_t src_pitch_px = sp / sizeof(uint32_t);
+	uint32_t dst_pitch_px = dp / sizeof(uint32_t);
+
+	for (uint32_t y = 0; y < sh; y++) {
+		for (uint32_t x = 0; x < sw; x++) {
+			uint32_t center = s[y * src_pitch_px + x];
+			
+			// Get adjacent pixels (with bounds checking)
+			uint32_t top = (y > 0) ? s[(y-1) * src_pitch_px + x] : center;
+			uint32_t bottom = (y < sh-1) ? s[(y+1) * src_pitch_px + x] : center;
+			uint32_t left = (x > 0) ? s[y * src_pitch_px + (x-1)] : center;
+			uint32_t right = (x < sw-1) ? s[y * src_pitch_px + (x+1)] : center;
+			
+			// Calculate the 2x2 output block using Scale2x algorithm
+			uint32_t e = (top == left && top != right) ? top : center;
+			uint32_t f = (top == right && top != left) ? top : center;
+			uint32_t g = (bottom == left && bottom != right) ? bottom : center;
+			uint32_t h = (bottom == right && bottom != left) ? bottom : center;
+			
+			// Write to destination
+			uint32_t dst_offset = y * 2 * dst_pitch_px + x * 2;
+			d[dst_offset] = e;
+			d[dst_offset + 1] = f;
+			d[dst_offset + dst_pitch_px] = g;
+			d[dst_offset + dst_pitch_px + 1] = h;
+		}
+	}
+}
+
 #ifdef HAS_NEON
 
 //

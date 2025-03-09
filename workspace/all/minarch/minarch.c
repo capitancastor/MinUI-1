@@ -40,6 +40,7 @@ enum {
 	SCALE_ASPECT,
 	SCALE_FULLSCREEN,
 	SCALE_CROPPED,
+	SCALE_SCALE2X,
 	SCALE_COUNT,
 };
 
@@ -617,6 +618,7 @@ static char* scaling_labels[] = {
 	"Aspect",
 	"Fullscreen",
 	"Cropped",
+	"Scale2x",
 	NULL
 };
 static char* effect_labels[] = {
@@ -812,14 +814,14 @@ enum {
 
 static inline char* getScreenScalingDesc(void) {
 	if (GFX_supportsOverscan()) {
-		return "Native uses integer scaling. Aspect uses core\nreported aspect ratio. Fullscreen has non-square\npixels. Cropped is integer scaled then cropped.";
+		return "Native uses integer scaling. Aspect uses core\nreported aspect ratio. Fullscreen has non-square\npixels. Cropped is integer scaled then cropped.\nScale2x uses the Scale2x algorithm for sharp edges.";
 	}
 	else {
-		return "Native uses integer scaling.\nAspect uses core reported aspect ratio.\nFullscreen has non-square pixels.";
+		return "Native uses integer scaling.\nAspect uses core reported aspect ratio.\nFullscreen has non-square pixels.\nScale2x uses the Scale2x algorithm for sharp edges.";
 	}
 }
 static inline int getScreenScalingCount(void) {
-	return GFX_supportsOverscan() ? 4 : 3;
+	return GFX_supportsOverscan() ? 5 : 4; // Now includes Scale2x
 }
 	
 
@@ -2568,6 +2570,24 @@ static void selectScaler(int src_w, int src_h, int src_p) {
 		scaling = SCALE_NATIVE;
 	}
 	
+	// Handle Scale2x specially
+	if (scaling==SCALE_SCALE2X) {
+		sprintf(scaler_name, "scale2x");
+		dst_w = src_w * 2;
+		dst_h = src_h * 2;
+		dst_p = dst_w * FIXED_BPP;
+		dst_x = (DEVICE_WIDTH - dst_w) / 2;
+		dst_y = (DEVICE_HEIGHT - dst_h) / 2;
+		scale = 2;
+		
+		renderer.scaling_mode = SCALING_SCALE2X;
+		renderer.aspect = 0;
+		return;
+	}
+	else {
+		renderer.scaling_mode = SCALING_NORMAL;
+	}
+	
 	if (scaling==SCALE_NATIVE || scaling==SCALE_CROPPED) {
 		// this is the same whether fit or oversized
 		scale = MIN(DEVICE_WIDTH/src_w, DEVICE_HEIGHT/src_h);
@@ -2749,6 +2769,7 @@ static void selectScaler(int src_w, int src_h, int src_p) {
 	renderer.dst_p = dst_p;
 	renderer.scale = scale;
 	renderer.aspect = (scaling==SCALE_NATIVE||scaling==SCALE_CROPPED)?0:(scaling==SCALE_FULLSCREEN?-1:core.aspect_ratio);
+	renderer.scaling_mode = (scaling==SCALE_SCALE2X) ? SCALING_SCALE2X : SCALING_NORMAL;
 	LOG_info("aspect: %f\n", renderer.aspect);
 	renderer.blit = GFX_getScaler(&renderer);
 		

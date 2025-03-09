@@ -17,6 +17,7 @@
 #include "utils.h"
 
 #include "scaler.h"
+#include "scaling.h"
 
 int is_brick = 0;
 
@@ -184,9 +185,11 @@ static void resizeVideo(int w, int h, int p) {
 	SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, vid.sharpness==SHARPNESS_SOFT?"1":"0", SDL_HINT_OVERRIDE);
 	vid.texture = SDL_CreateTexture(vid.renderer,SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING, w,h);
 	
-	if (vid.sharpness==SHARPNESS_CRISP) {
+	// Create a target texture for either CRISP mode or Scale2x
+	if (vid.sharpness==SHARPNESS_CRISP || (vid.blit && vid.blit->scaling_mode == SCALING_SCALE2X)) {
+		int scale_factor = (vid.blit && vid.blit->scaling_mode == SCALING_SCALE2X) ? 2 : hard_scale;
 		SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "1", SDL_HINT_OVERRIDE);
-		vid.target = SDL_CreateTexture(vid.renderer,SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_TARGET, w * hard_scale,h * hard_scale);
+		vid.target = SDL_CreateTexture(vid.renderer,SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_TARGET, w * scale_factor, h * scale_factor);
 	}
 	else {
 		vid.target = NULL;
@@ -359,8 +362,14 @@ void PLAT_vsync(int remaining) {
 }
 
 scaler_t PLAT_getScaler(GFX_Renderer* renderer) {
-	// LOG_info("getScaler for scale: %i\n", renderer->scale);
+	// LOG_info("getScaler for scale: %i, scaling_mode: %i\n", renderer->scale, renderer->scaling_mode);
 	effect.next_scale = renderer->scale;
+	
+	// If Scale2x algorithm is selected, return our special function
+	if (renderer->scaling_mode == SCALING_SCALE2X) {
+		return scale2x_adv_c16;
+	}
+	
 	return scale1x1_c16;
 }
 
@@ -389,7 +398,78 @@ void PLAT_flip(SDL_Surface* IGNORED, int ignored) {
 	int y = vid.blit->src_y;
 	int w = vid.blit->src_w;
 	int h = vid.blit->src_h;
-	if (vid.sharpness==SHARPNESS_CRISP) {
+	
+	// Apply Scale2x algorithm if selected
+	if (vid.blit->scaling_mode == SCALING_SCALE2X) {
+		// Create temporary surfaces for Scale2x processing
+		SDL_Surface* src_surface = SDL_CreateRGBSurfaceFrom(
+			vid.blit->src, 
+			vid.blit->src_w, 
+			vid.blit->src_h, 
+			FIXED_DEPTH, 
+			vid.blit->src_p, 
+			RGBA_MASK_565
+		);
+		
+		SDL_Surface* dst_surface = SDL_CreateRGBSurface(
+			SDL_SWSURFACE, 
+			vid.blit->src_w * 2, 
+			vid.blit->src_h * 2, 
+			FIXED_DEPTH, 
+			RGBA_MASK_565
+		);
+		
+		// Apply Scale2x algorithm
+		scale2x_adv_c16(
+			src_surface->pixels, 
+			dst_surface->pixels, 
+			vid.blit->src_w, 
+			vid.blit->src_h, 
+			src_surface->pitch, 
+			dst_surface->pitch, 
+			dst_surface->w * 2, 
+			dst_surface->pitch
+		);
+		
+		if (vid.target) {
+			// Use the render target approach if available
+			SDL_SetRenderTarget(vid.renderer, vid.target);
+			SDL_Texture* scaled_texture = SDL_CreateTextureFromSurface(vid.renderer, dst_surface);
+			
+			// Clear the target
+			SDL_RenderClear(vid.renderer);
+			
+			// Render to the target
+			SDL_RenderCopy(vid.renderer, scaled_texture, NULL, NULL);
+			
+			// Clean up
+			SDL_DestroyTexture(scaled_texture);
+			
+			// Set the target back to NULL
+			SDL_SetRenderTarget(vid.renderer, NULL);
+			
+			// Scale the coordinates
+			x *= 2;
+			y *= 2;
+			w *= 2;
+			h *= 2;
+			target = vid.target;
+		} else {
+			// Direct approach if render target isn't available
+			SDL_Texture* scaled_texture = SDL_CreateTextureFromSurface(vid.renderer, dst_surface);
+			target = scaled_texture;
+			
+			// We'll need to destroy this texture after rendering
+			static SDL_Texture* prev_texture = NULL;
+			if (prev_texture) SDL_DestroyTexture(prev_texture);
+			prev_texture = scaled_texture;
+		}
+		
+		// Clean up surfaces
+		SDL_FreeSurface(src_surface);
+		SDL_FreeSurface(dst_surface);
+	}
+	else if (vid.sharpness==SHARPNESS_CRISP) {
 		SDL_SetRenderTarget(vid.renderer,vid.target);
 		SDL_RenderCopy(vid.renderer, vid.texture, NULL,NULL);
 		SDL_SetRenderTarget(vid.renderer,NULL);

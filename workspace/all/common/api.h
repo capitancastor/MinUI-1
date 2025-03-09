@@ -3,6 +3,7 @@
 #include "sdl.h"
 #include "platform.h"
 #include "scaler.h"
+#include "scaling.h"
 
 ///////////////////////////////
 
@@ -119,6 +120,7 @@ typedef struct GFX_Renderer {
 	void* blit;
 	double aspect; // 0 for integer, -1 for fullscreen, otherwise aspect ratio, used for SDL2 accelerated scaling
 	int scale;
+	int scaling_mode; // SCALING_* constants from scaling.h
 	
 	// TODO: document this better
 	int true_w;
