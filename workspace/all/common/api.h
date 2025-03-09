@@ -3,7 +3,6 @@
 #include "sdl.h"
 #include "platform.h"
 #include "scaler.h"
-#include "scaling.h"
 
 ///////////////////////////////
 
@@ -101,17 +100,30 @@ typedef struct GFX_Fonts {
 } GFX_Fonts;
 extern GFX_Fonts font;
 
+// Scaling mode enumeration
 enum {
-	SHARPNESS_SHARP,
-	SHARPNESS_CRISP,
-	SHARPNESS_SOFT,
+    SCALING_NORMAL = 0,    // Normal (no special scaling)
+    SCALING_ASPECT,        // Maintain aspect ratio
+    SCALING_FULLSCREEN,    // Fill the screen
+    SCALING_NATIVE,        // Show at original/native resolution
+    SCALING_SCALE2X,       // Use Scale2x algorithm
+    SCALING_COUNT          // Total number of scaling modes
 };
 
+// Put all sharpness modes back in api.h
 enum {
-	EFFECT_NONE,
-	EFFECT_LINE,
-	EFFECT_GRID,
-	EFFECT_COUNT,
+	SHARPNESS_SHARP,
+    SHARPNESS_SOFT,
+    SHARPNESS_CRISP,
+    SHARPNESS_COUNT
+};
+
+// Display effects
+enum {
+    EFFECT_NONE = 0,
+    EFFECT_GRID,
+    EFFECT_LINE,
+    EFFECT_COUNT
 };
 
 typedef struct GFX_Renderer {
